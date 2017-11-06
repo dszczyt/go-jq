@@ -26,12 +26,24 @@ func NewJQ(program string) (*JQ, error) {
 	return jq, nil
 }
 
-func (jq *JQ) Handle(value interface{}) {
-	jq.start(goToJv(value))
+func (jq *JQ) Handle(value interface{}) error {
+	jv := goToJv(value)
+	if C.jv_is_valid(jv) == 0 {
+		return errors.New("Invalid JSON")
+	}
+	jq.start(jv)
+	return nil
 }
 
-func (jq *JQ) HandleJson(text string) {
-	jq.start(parseJson(text))
+func (jq *JQ) HandleJson(text string) error {
+	jv, err := parseJson(text)
+
+	if err == nil {
+		jq.start(jv)
+		return nil
+	} else {
+		return err
+	}
 }
 
 func (jq *JQ) Next() bool {
@@ -57,8 +69,11 @@ func (jq *JQ) Close() {
 // JQ APIs
 
 func (jq *JQ) compile(program string) error {
-	_ = C.jq_compile(jq.state, C.CString(program))
-	return nil
+	if rc := C.jq_compile(jq.state, C.CString(program)); rc == 0 {
+		return errors.New("Unable to compile jq filter")
+	} else {
+		return nil
+	}
 }
 
 func (jq *JQ) start(jv C.jv) {
@@ -75,8 +90,12 @@ func (jq *JQ) teardown() {
 
 // JSON values
 
-func parseJson(value string) C.jv {
-	return C.jv_parse(C.CString(value))
+func parseJson(value string) (C.jv, error) {
+	v := C.jv_parse(C.CString(value))
+	if C.jv_is_valid(v) == 0 {
+		return C.jv_null(), errors.New("Invalid JSON")
+	}
+	return v, nil
 }
 
 func dumpJson(jv C.jv) string {
